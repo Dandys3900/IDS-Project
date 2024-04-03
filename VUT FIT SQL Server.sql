@@ -1,5 +1,6 @@
--- Druha cast projektu do predmetu IDS 2023/24
+-- Druha a treti cast projektu do predmetu IDS 2023/24
 -- -> SQL skript pro vytvoreni zakladnich objektu databaze
+-- -> SQL skript s dotazy SELECT
 -- -> Autori:
 --      -> Tomas Daniel (xdanie14)
 --      -> Jakub Jansta (xjanst02)
@@ -118,21 +119,45 @@ INSERT INTO Kouzelnici (runoveJmeno, obcanskeJmeno, kouzelnickaUroven, ulice    
     VALUES             ('Merlin'   , 'Pavel Novak', 99               , 'Hollywood Boulevare', 'Brno', 123, 1);
 INSERT INTO Kouzelnici (runoveJmeno, obcanskeJmeno, kouzelnickaUroven, ulice       , mesto     , psc, cisloDomu)
     VALUES             ('Gandalf'  , 'Pepa Soucek', 121              , 'China town', 'New York', 41 , 76);
+INSERT INTO Kouzelnici (runoveJmeno, obcanskeJmeno  , kouzelnickaUroven, ulice        , mesto     , psc, cisloDomu)
+    VALUES             ('One Eye'  , 'Karel Pokorny', 60               , 'Bozetechova', 'Brno'    , 10 , 11);
 
 INSERT INTO Predmety (nazev)
     VALUES           ('Magic sword');
 INSERT INTO Predmety (nazev)
     VALUES           ('Potion of healing');
+INSERT INTO Predmety (nazev)
+    VALUES           ('Invisibility shield');
+INSERT INTO Predmety (nazev)
+    VALUES           ('Potion of death');
+INSERT INTO Predmety (nazev)
+    VALUES           ('Magic shoes');
+INSERT INTO Predmety (nazev)
+    VALUES           ('Stick of death');
 -- Vlozeni dat do dedici tabulky
 INSERT INTO MudlovskePredmety (runovyKod, vyrobce     , cena)
     VALUES                    (1        , 'Smithy Co.', 50.00);
 INSERT INTO KouzelnePredmety (runovyKod, velikost, nebezpecnost, typ)
     VALUES                   (2        , 10      , 5           , 'Fireball scroll');
+INSERT INTO MudlovskePredmety (runovyKod, vyrobce             , cena)
+    VALUES                    (3        , 'Zbrojovka Brno Co.', 450.00);
+INSERT INTO KouzelnePredmety (runovyKod, velikost, nebezpecnost, typ)
+    VALUES                   (4        , 4       , 9           , 'Coconut smell');
+INSERT INTO MudlovskePredmety (runovyKod, vyrobce, cena)
+    VALUES                    (5        , 'Bata' , 54.90);
+INSERT INTO KouzelnePredmety (runovyKod, velikost, nebezpecnost, typ)
+    VALUES                   (6        , 10      , 10          , 'Stick of death');
 
 INSERT INTO Vlastnictvi (zpusobZiskani       , runovyKodPredmetu, runoveJmenoKouzelnika)
     VALUES              ('Found in a dungeon', 1                , 'Merlin');
 INSERT INTO Vlastnictvi (zpusobZiskani              , zpusobZtraty        , runovyKodPredmetu, runoveJmenoKouzelnika)
     VALUES              ('Purchased from a merchant', 'Lost during battle', 2                , 'Gandalf');
+INSERT INTO Vlastnictvi (zpusobZiskani         , runovyKodPredmetu, runoveJmenoKouzelnika)
+    VALUES              ('Found on battlefield', 3                , 'One Eye');
+INSERT INTO Vlastnictvi (zpusobZiskani, runovyKodPredmetu, runoveJmenoKouzelnika)
+    VALUES              ('Not known'  , 4                , 'One Eye');
+INSERT INTO Vlastnictvi (zpusobZiskani     , runovyKodPredmetu, runoveJmenoKouzelnika)
+    VALUES              ('Given by strange', 5                , 'One Eye');
 
 INSERT INTO TypyStop (typ)
     VALUES           ('Deadly smell');
@@ -160,4 +185,56 @@ INSERT INTO ZachyceneStopy (poziceSaturnu, poziceJupiteru, pocetObehuJupiteru, m
 INSERT INTO ZachyceneStopy (poziceSaturnu, poziceJupiteru, pocetObehuJupiteru, mesicniFaze, runoveJmenoKouzelnika, idDetektoru, idTypu, runovyKodPredmetu)
     VALUES                 (250          , 300           , 5                 , 'nov'      , NULL                 , 5          , 2     , 2);
 
+INSERT INTO ZachyceneStopy (poziceSaturnu, poziceJupiteru, pocetObehuJupiteru, mesicniFaze, runoveJmenoKouzelnika, idDetektoru, idTypu, runovyKodPredmetu)
+    VALUES                 (250          , 300           , 5                 , 'nov'      , NULL                 , 5          , 2     , 6);
+
 ------------------------------------------------------------------
+
+------------------------ SELECT Commands -------------------------
+-- Spojeni 2 tabulek:
+--  Ktere predmety nejvyssi nebezpecnosti zanechaly nejakou stopu?
+SELECT KouzelnePredmety.typ
+FROM KouzelnePredmety
+JOIN ZachyceneStopy ON KouzelnePredmety.runovyKod = ZachyceneStopy.runovyKodPredmetu
+WHERE KouzelnePredmety.nebezpecnost = 10
+GROUP BY KouzelnePredmety.typ;
+
+--  Ktere typy stop jsou zachytnutelne detektory?
+SELECT typ AS nazevStopy
+FROM TypyStop
+JOIN StopyZachytnutelneDetektory ON TypyStop.idTypu = StopyZachytnutelneDetektory.idTypu;
+
+-- Spojeni 3 tabulek:
+--  Kteri kouzelnici zachytili stopy svych vlastnich predmetu?
+SELECT Kouzelnici.obcanskeJmeno AS jmenoKouzelnika
+FROM ZachyceneStopy
+JOIN Kouzelnici ON ZachyceneStopy.runoveJmenoKouzelnika = Kouzelnici.runoveJmeno
+JOIN Vlastnictvi ON Kouzelnici.runoveJmeno = Vlastnictvi.runovejmenokouzelnika AND ZachyceneStopy.runovyKodPredmetu = Vlastnictvi.runovyKodPredmetu;
+
+-- Pouziti GROUP BY a agregacni funkce
+-- Ktery kouzelnik vlastni 3 a vice predmetu?
+SELECT Kouzelnici.obcanskeJmeno, COUNT(Vlastnictvi.idVlastnictvi) AS pocetPredmetu
+FROM Kouzelnici
+INNER JOIN Vlastnictvi ON Vlastnictvi.runoveJmenoKouzelnika = Kouzelnici.runoveJmeno
+GROUP BY Kouzelnici.obcanskeJmeno
+HAVING COUNT(Vlastnictvi.idVlastnictvi) >= 3;
+-- Ktere aktivni detektory zachytily vice jak 2 stopy of magickeho predmetu a ktere predmety to byly?
+
+-- Pouzit EXISTS
+-- Ktere vlastnene predmety nezanechaly doposud zadnou stopu?
+SELECT Predmety.nazev AS nazevPredmetu
+FROM Predmety
+WHERE NOT EXISTS (
+    SELECT *
+    FROM ZachyceneStopy
+    WHERE ZachyceneStopy.runovyKodPredmetu = Predmety.runovyKod
+);
+
+-- Pouzit vnoreny IN
+-- Kteri kouzelnici z Brna uz se angazovali a zachytili alespon jednu stopu?
+SELECT Kouzelnici.obcanskeJmeno AS jmenoKouzelnika, Kouzelnici.mesto
+FROM Kouzelnici
+WHERE Kouzelnici.runoveJmeno IN (
+    SELECT ZachyceneStopy.runoveJmenoKouzelnika
+    FROM ZachyceneStopy
+) AND Kouzelnici.mesto = 'Brno';
