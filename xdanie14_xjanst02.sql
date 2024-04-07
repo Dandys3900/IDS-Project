@@ -211,7 +211,7 @@ INSERT INTO ZachyceneStopy (poziceSaturnu, poziceJupiteru, pocetObehuJupiteru, m
 
 ------------------------ SELECT Commands -------------------------
 -- Spojeni 2 tabulek:
--- Ktere predmety nejvyssi nebezpecnosti zanechaly nejakou stopu?
+-- Jake typy stop zanechaly kouzelne predmety s nejvyssi nebezpecnosti?
 SELECT KouzelnePredmety.typ
 FROM KouzelnePredmety
 JOIN ZachyceneStopy ON KouzelnePredmety.runovyKod = ZachyceneStopy.runovyKodPredmetu
@@ -230,15 +230,24 @@ FROM ZachyceneStopy
 JOIN Kouzelnici ON ZachyceneStopy.runoveJmenoKouzelnika = Kouzelnici.runoveJmeno
 JOIN Vlastnictvi ON Kouzelnici.runoveJmeno = Vlastnictvi.runovejmenokouzelnika AND ZachyceneStopy.runovyKodPredmetu = Vlastnictvi.runovyKodPredmetu;
 
--- Pouziti GROUP BY a agregacni funkce
--- Ktery kouzelnik vlastni 3 a vice predmetu?
+-- Pouziti GROUP BY a agregacni funkce:
+-- Kteri kouzelnici vlastni 3 a vice predmetu a kolik jich tedy vlastni?
 SELECT Kouzelnici.obcanskeJmeno, COUNT(Vlastnictvi.idVlastnictvi) AS pocetPredmetu
 FROM Kouzelnici
 INNER JOIN Vlastnictvi ON Vlastnictvi.runoveJmenoKouzelnika = Kouzelnici.runoveJmeno
 GROUP BY Kouzelnici.obcanskeJmeno
 HAVING COUNT(Vlastnictvi.idVlastnictvi) >= 3;
 
--- Pouzit EXISTS
+-- Ktere aktivni detektory zachytily vice jak 2 stopy predmetu a ktere predmety to byly?
+SELECT Detektory.idDetektoru, Predmety.nazev
+FROM Detektory
+JOIN ZachyceneStopy ON Detektory.idDetektoru = ZachyceneStopy.idDetektoru
+JOIN Predmety ON ZachyceneStopy.runovyKodPredmetu = Predmety.runovyKod
+WHERE Detektory.stav = 'Active'
+GROUP BY Detektory.idDetektoru, Predmety.nazev
+HAVING COUNT(ZachyceneStopy.idZachyceni) >= 2;
+
+-- Pouziti EXISTS:
 -- Ktere vlastnene predmety nezanechaly doposud zadnou stopu?
 SELECT Predmety.nazev AS nazevPredmetu
 FROM Predmety
@@ -248,7 +257,7 @@ WHERE NOT EXISTS (
     WHERE ZachyceneStopy.runovyKodPredmetu = Predmety.runovyKod
 );
 
--- Pouzit vnoreny IN
+-- Pouziti vnoreneho IN:
 -- Kteri kouzelnici z Brna uz se angazovali a zachytili alespon jednu stopu?
 SELECT Kouzelnici.obcanskeJmeno AS jmenoKouzelnika, Kouzelnici.mesto
 FROM Kouzelnici
@@ -256,12 +265,3 @@ WHERE Kouzelnici.runoveJmeno IN (
     SELECT ZachyceneStopy.runoveJmenoKouzelnika
     FROM ZachyceneStopy
 ) AND Kouzelnici.mesto = 'Brno';
-
--- Ktere aktivni detektory zachytily vice jak 2 stopy magickeho predmetu a ktere predmety to byly?
-SELECT Detektory.idDetektoru, Predmety.nazev
-FROM Detektory
-JOIN ZachyceneStopy ON Detektory.idDetektoru = ZachyceneStopy.idDetektoru
-JOIN Predmety ON ZachyceneStopy.runovyKodPredmetu = Predmety.runovyKod
-WHERE Detektory.stav = 'Active'
-GROUP BY Detektory.idDetektoru, Predmety.nazev
-HAVING COUNT(ZachyceneStopy.idZachyceni) >= 2;
