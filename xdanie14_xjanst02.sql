@@ -188,24 +188,43 @@ INSERT INTO ZachyceneStopy (poziceSaturnu, poziceJupiteru, pocetObehuJupiteru, m
 INSERT INTO ZachyceneStopy (poziceSaturnu, poziceJupiteru, pocetObehuJupiteru, mesicniFaze, runoveJmenoKouzelnika, idDetektoru, idTypu, runovyKodPredmetu)
     VALUES                 (250          , 300           , 5                 , 'nov'      , NULL                 , 5          , 2     , 6);
 
+INSERT INTO ZachyceneStopy (poziceSaturnu, poziceJupiteru, pocetObehuJupiteru, mesicniFaze, runoveJmenoKouzelnika, idDetektoru, idTypu, runovyKodPredmetu)
+    VALUES                 (250          , 300           , 5                 , 'nov'      , NULL                 , 5          , 2     , 2);
+
+INSERT INTO ZachyceneStopy (poziceSaturnu, poziceJupiteru, pocetObehuJupiteru, mesicniFaze, runoveJmenoKouzelnika, idDetektoru, idTypu, runovyKodPredmetu)
+    VALUES                 (250          , 300           , 5                 , 'nov'      , NULL                 , 5          , 2     , 6);
+
+INSERT INTO ZachyceneStopy (poziceSaturnu, poziceJupiteru, pocetObehuJupiteru, mesicniFaze, runoveJmenoKouzelnika, idDetektoru, idTypu, runovyKodPredmetu)
+    VALUES                 (250          , 300           , 5                 , 'nov'      , NULL                 , 5          , 2     , 1);
+
+INSERT INTO ZachyceneStopy (poziceSaturnu, poziceJupiteru, pocetObehuJupiteru, mesicniFaze, runoveJmenoKouzelnika, idDetektoru, idTypu, runovyKodPredmetu)
+    VALUES                 (250          , 300           , 5                 , 'nov'      , NULL                 , 6          , 2     , 2);
+
+INSERT INTO ZachyceneStopy (poziceSaturnu, poziceJupiteru, pocetObehuJupiteru, mesicniFaze, runoveJmenoKouzelnika, idDetektoru, idTypu, runovyKodPredmetu)
+    VALUES                 (250          , 300           , 5                 , 'nov'      , NULL                 , 6          , 2     , 2);
+
+INSERT INTO ZachyceneStopy (poziceSaturnu, poziceJupiteru, pocetObehuJupiteru, mesicniFaze, runoveJmenoKouzelnika, idDetektoru, idTypu, runovyKodPredmetu)
+    VALUES                 (250          , 300           , 5                 , 'nov'      , NULL                 , 6          , 2     , 2);
+
+
 ------------------------------------------------------------------
 
 ------------------------ SELECT Commands -------------------------
 -- Spojeni 2 tabulek:
---  Ktere predmety nejvyssi nebezpecnosti zanechaly nejakou stopu?
+-- Ktere predmety nejvyssi nebezpecnosti zanechaly nejakou stopu?
 SELECT KouzelnePredmety.typ
 FROM KouzelnePredmety
 JOIN ZachyceneStopy ON KouzelnePredmety.runovyKod = ZachyceneStopy.runovyKodPredmetu
 WHERE KouzelnePredmety.nebezpecnost = 10
 GROUP BY KouzelnePredmety.typ;
 
---  Ktere typy stop jsou zachytnutelne detektory?
+-- Ktere typy stop jsou zachytnutelne detektory?
 SELECT typ AS nazevStopy
 FROM TypyStop
 JOIN StopyZachytnutelneDetektory ON TypyStop.idTypu = StopyZachytnutelneDetektory.idTypu;
 
 -- Spojeni 3 tabulek:
---  Kteri kouzelnici zachytili stopy svych vlastnich predmetu?
+-- Kteri kouzelnici zachytili stopy svych vlastnich predmetu?
 SELECT Kouzelnici.obcanskeJmeno AS jmenoKouzelnika
 FROM ZachyceneStopy
 JOIN Kouzelnici ON ZachyceneStopy.runoveJmenoKouzelnika = Kouzelnici.runoveJmeno
@@ -218,7 +237,6 @@ FROM Kouzelnici
 INNER JOIN Vlastnictvi ON Vlastnictvi.runoveJmenoKouzelnika = Kouzelnici.runoveJmeno
 GROUP BY Kouzelnici.obcanskeJmeno
 HAVING COUNT(Vlastnictvi.idVlastnictvi) >= 3;
--- Ktere aktivni detektory zachytily vice jak 2 stopy of magickeho predmetu a ktere predmety to byly?
 
 -- Pouzit EXISTS
 -- Ktere vlastnene predmety nezanechaly doposud zadnou stopu?
@@ -238,3 +256,12 @@ WHERE Kouzelnici.runoveJmeno IN (
     SELECT ZachyceneStopy.runoveJmenoKouzelnika
     FROM ZachyceneStopy
 ) AND Kouzelnici.mesto = 'Brno';
+
+-- Ktere aktivni detektory zachytily vice jak 2 stopy magickeho predmetu a ktere predmety to byly?
+SELECT Detektory.idDetektoru, Predmety.nazev
+FROM Detektory
+JOIN ZachyceneStopy ON Detektory.idDetektoru = ZachyceneStopy.idDetektoru
+JOIN Predmety ON ZachyceneStopy.runovyKodPredmetu = Predmety.runovyKod
+WHERE Detektory.stav = 'Active'
+GROUP BY Detektory.idDetektoru, Predmety.nazev
+HAVING COUNT(ZachyceneStopy.idZachyceni) >= 2;
