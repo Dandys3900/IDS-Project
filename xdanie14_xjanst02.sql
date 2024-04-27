@@ -133,7 +133,26 @@ BEGIN
 END;
 /
 
---TODO: pridat druhy trigger + showcase pro nej
+-- Trigger pro pripad, kdy je zachycena stopa predmetu s vysokou nebezpecnosti
+-- Vypis obsahuje runovy kod dotycneho predmetu a jeho nebezpecnost
+CREATE OR REPLACE TRIGGER log_pouziti_nebezpecneho_predmetu
+    AFTER INSERT ON ZachyceneStopy
+    FOR EACH ROW
+DECLARE
+    nebezpecnost_pouziteho_premetu INT;
+BEGIN
+    SELECT nebezpecnost
+    INTO nebezpecnost_pouziteho_premetu
+    FROM KouzelnePredmety
+    WHERE runovyKod = :NEW.runovyKodPredmetu;
+    IF nebezpecnost_pouziteho_premetu = 10 THEN
+        DBMS_OUTPUT.PUT_LINE('Pouziti predmetu s runovym kodem "' || :NEW.runovyKodPredmetu || '" s nejvyssi nebezpecnosti zachyceno!!!');
+    ELSIF nebezpecnost_pouziteho_premetu > 7 THEN
+        DBMS_OUTPUT.PUT_LINE('Pouziti nebezpecneho predmetu s runovym kodem "' || :NEW.runovyKodPredmetu || '" se zvysenou nebezpecnosti "' || nebezpecnost_pouziteho_premetu || '" zachyceno.');
+    END IF;
+END;
+/
+
 
 ------------------------------------------------------------------
 
@@ -230,6 +249,9 @@ INSERT INTO ZachyceneStopy (poziceSaturnu, poziceJupiteru, pocetObehuJupiteru, m
 INSERT INTO ZachyceneStopy (poziceSaturnu, poziceJupiteru, pocetObehuJupiteru, mesicniFaze, runoveJmenoKouzelnika, idDetektoru, idTypu, runovyKodPredmetu)
     VALUES                 (250          , 300           , 5                 , 'nov'      , NULL                 , 6          , 2     , 2);
 
+INSERT INTO ZachyceneStopy (poziceSaturnu, poziceJupiteru, pocetObehuJupiteru, mesicniFaze, runoveJmenoKouzelnika, idDetektoru, idTypu, runovyKodPredmetu)
+    VALUES                 (250          , 300           , 5                 , 'nov'      , NULL                 , 6          , 2     , 4);
+
 ------------------------------------------------------------------
 
 ------------------------ SELECT Commands -------------------------
@@ -318,6 +340,8 @@ FROM
 -- Ukazka prvniho triggeru:
     -- Vypis obsahuje jeden zaznam s kouzelnikem "Merlin" a predmetem s ID, ktere odpovida "Magic sword".
 
+-- Ukazka druheho triggeru:
+    -- Vypis obsahuje 3x pouziti predmetu s runovym kodem 6 nejvyssi nebezpecnosti a 1x pouziti predmetu s runovym kodem 4 se zvysenou nebezpecnosti 9.
 ------------------------------------------------------------------
 
 --------------------------- PROCEDURES ---------------------------
@@ -366,7 +390,49 @@ BEGIN
 END;
 /
 
---TODO: pridat druhou proceduru a jeji volani
+
+-- Procedura, ktera validne provede prevod vlastnictvi predmetu mezi kouzelniky
+CREATE OR REPLACE PROCEDURE prevod_vlastnictvi_predmetu(
+    runovy_kod_predmetu INT,
+    runove_jmeno_stareho_kouzelnika NVARCHAR2,
+    runove_jmeno_noveho_kouzelnika NVARCHAR2,
+    zpusob_ztraty_stareho_kouzelnika NVARCHAR2,
+    zpusob_ziskani_noveho_kouzelnika NVARCHAR2
+)
+AS
+    id_vlastnictvi_stareho_kouzelnika INT;
+BEGIN
+    -- ziskani id vlastnictvi predmetu stareho kouzelnika
+    SELECT idVlastnictvi INTO id_vlastnictvi_stareho_kouzelnika
+    FROM Vlastnictvi
+    WHERE runovyKodPredmetu = runovy_kod_predmetu
+    AND runoveJmenoKouzelnika = runove_jmeno_stareho_kouzelnika
+    AND zpusobZtraty IS NULL;
+
+    -- Odstraneni vlastnictvi od stareho kouzelnika
+    UPDATE Vlastnictvi
+    SET zpusobZtraty = zpusob_ztraty_stareho_kouzelnika
+    WHERE runovyKodPredmetu = runovy_kod_predmetu
+    AND runoveJmenoKouzelnika = runove_jmeno_stareho_kouzelnika
+    AND zpusobZtraty IS NULL;
+
+    -- Pridani vlastnictvi novemu kouzelnikovi
+    INSERT INTO Vlastnictvi (zpusobZiskani               , runovyKodPredmetu  , runoveJmenoKouzelnika)
+    VALUES              (zpusob_ziskani_noveho_kouzelnika, runovy_kod_predmetu, runove_jmeno_noveho_kouzelnika);
+
+    DBMS_OUTPUT.PUT_LINE('Predmet s runovym kodem "' || runovy_kod_predmetu || '" byl presunut z vlastnictvi kouzelnika "' || runove_jmeno_stareho_kouzelnika || '" do vlastnictvi kouzelnika "' || runove_jmeno_noveho_kouzelnika || '".');
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Chyba pri prevodu vlastnictvi predmetu s runovym kodem "' || runovy_kod_predmetu || '" z vlastnictvi kouzelnika "' || runove_jmeno_stareho_kouzelnika || '" do vlastnictvi kouzelnika "' || runove_jmeno_noveho_kouzelnika || '".');
+END prevod_vlastnictvi_predmetu;
+/
+
+-- Priklad spusteni:
+BEGIN
+    prevod_vlastnictvi_predmetu(1, 'Merlin', 'Gandalf', 'Prevod predmetu', 'Prevod predmetu');
+END;
+/
+
 
 ------------------------------------------------------------------
 
