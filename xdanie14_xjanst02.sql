@@ -464,6 +464,22 @@ GROUP BY runovyKodPredmetu;
 
 ------------------------------------------------------------------
 
+---------------------- INDEX + EXPLAIN PLAN ----------------------
+
+-- vytvoreni indexu pro vyhledavani zachycenych stop podle runoveho jmena kouzelnika
+CREATE INDEX index_zachycenestopy_kouzelnik ON ZachyceneStopy(runoveJmenoKouzelnika);
+
+EXPLAIN PLAN FOR
+    SELECT Kouzelnici.runoveJmeno, COUNT(ZachyceneStopy.idZachyceni) AS pocet_zachyceni
+    FROM Kouzelnici
+    LEFT JOIN ZachyceneStopy ON Kouzelnici.runoveJmeno = ZachyceneStopy.runoveJmenoKouzelnika
+    GROUP BY Kouzelnici.runoveJmeno;
+
+-- vypis planu
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
+
+------------------------------------------------------------------
+
 -------------------------- GRANT ACCESS --------------------------
 GRANT ALL ON ZachyceneStopy              TO xjanst02;
 GRANT ALL ON StopyZachytnutelneDetektory TO xjanst02;
