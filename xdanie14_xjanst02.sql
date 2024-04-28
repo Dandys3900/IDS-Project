@@ -139,20 +139,24 @@ CREATE OR REPLACE TRIGGER log_pouziti_nebezpecneho_predmetu
     AFTER INSERT ON ZachyceneStopy
     FOR EACH ROW
 DECLARE
-    nebezpecnost_pouziteho_premetu INT;
+    nebezpecnost_pouziteho_predmetu INT;
 BEGIN
     SELECT nebezpecnost
-    INTO nebezpecnost_pouziteho_premetu
+    INTO nebezpecnost_pouziteho_predmetu
     FROM KouzelnePredmety
     WHERE runovyKod = :NEW.runovyKodPredmetu;
-    IF nebezpecnost_pouziteho_premetu = 10 THEN
+
+    IF nebezpecnost_pouziteho_predmetu = 10 THEN
         DBMS_OUTPUT.PUT_LINE('Pouziti predmetu s runovym kodem "' || :NEW.runovyKodPredmetu || '" s nejvyssi nebezpecnosti zachyceno!!!');
-    ELSIF nebezpecnost_pouziteho_premetu > 7 THEN
-        DBMS_OUTPUT.PUT_LINE('Pouziti nebezpecneho predmetu s runovym kodem "' || :NEW.runovyKodPredmetu || '" se zvysenou nebezpecnosti "' || nebezpecnost_pouziteho_premetu || '" zachyceno.');
+    ELSIF nebezpecnost_pouziteho_predmetu > 7 THEN
+        DBMS_OUTPUT.PUT_LINE('Pouziti nebezpecneho predmetu s runovym kodem "' || :NEW.runovyKodPredmetu || '" se zvysenou nebezpecnosti "' || nebezpecnost_pouziteho_predmetu || '" zachyceno.');
     END IF;
+EXCEPTION
+    -- Ignorovan pro pripad, kdy SELECT nenasel zadny predmet
+    WHEN OTHERS THEN
+        NULL;
 END;
 /
-
 
 ------------------------------------------------------------------
 
@@ -476,6 +480,6 @@ GRANT ALL ON zachycene_stopy_avg_jupiter TO xjanst02;
 
 -- Pristup ke spousteni procedur
 GRANT EXECUTE ON pocet_stop_prumer_detektor TO xjanst02;
--- TODO: pridat pristup pro druhou proceduru
+GRANT EXECUTE ON prevod_vlastnictvi_predmetu TO xjanst02;
 
 ------------------------------------------------------------------
