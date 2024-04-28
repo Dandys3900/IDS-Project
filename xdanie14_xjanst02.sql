@@ -1,6 +1,7 @@
 -- Druha a treti cast projektu do predmetu IDS 2023/24
 -- -> SQL skript pro vytvoreni zakladnich objektu databaze
 -- -> SQL skript s dotazy SELECT
+-- -> SQL skript obsahujici triggery, procedury a meterializovany pohled
 -- -> Autori:
 --      -> Tomas Daniel (xdanie14)
 --      -> Jakub Jansta (xjanst02)
@@ -18,6 +19,7 @@ DROP TABLE KouzelnePredmety;
 DROP TABLE MudlovskePredmety;
 DROP TABLE Predmety;
 DROP TABLE Kouzelnici;
+DROP MATERIALIZED VIEW zachycene_stopy_avg_jupiter;
 
 ------------------------------------------------------------------
 
@@ -110,6 +112,51 @@ CREATE TABLE ZachyceneStopy
     idTypu               INT            REFERENCES TypyStop(idTypu),
     runovyKodPredmetu    INT            REFERENCES Predmety(runovyKod)
 );
+
+------------------------------------------------------------------
+
+---------------------------- TRIGGERS ----------------------------
+-- Trigger pro pripad, kdy je zachycena stopa nekym vlastneneho predmetu, tedy je pouzit
+-- Vypis obsahuje runovy kod dotycneho predmetu, runove jmeno majitele predmetu a cas vlozeni do databaze
+CREATE OR REPLACE TRIGGER log_zachycene_stopy
+    AFTER INSERT ON ZachyceneStopy
+    FOR EACH ROW
+BEGIN
+    IF :NEW.runoveJmenoKouzelnika IS NOT NULL THEN
+        DBMS_OUTPUT.PUT_LINE(
+            'ID zachyceni: ' || :NEW.idZachyceni ||
+            ', runove jmeno kouzelnika: ' || :NEW.runoveJmenoKouzelnika ||
+            ', runovy kod predmetu: ' || :NEW.runovyKodPredmetu ||
+            ', cas: ' || TO_CHAR(SYSTIMESTAMP, 'DD-MON-YYYY HH24:MI:SS')
+        );
+    END IF;
+END;
+/
+
+-- Trigger pro pripad, kdy je zachycena stopa predmetu s vysokou nebezpecnosti
+-- Vypis obsahuje runovy kod dotycneho predmetu a jeho nebezpecnost
+CREATE OR REPLACE TRIGGER log_pouziti_nebezpecneho_predmetu
+    AFTER INSERT ON ZachyceneStopy
+    FOR EACH ROW
+DECLARE
+    nebezpecnost_pouziteho_predmetu INT;
+BEGIN
+    SELECT nebezpecnost
+    INTO nebezpecnost_pouziteho_predmetu
+    FROM KouzelnePredmety
+    WHERE runovyKod = :NEW.runovyKodPredmetu;
+
+    IF nebezpecnost_pouziteho_predmetu = 10 THEN
+        DBMS_OUTPUT.PUT_LINE('Pouziti predmetu s runovym kodem "' || :NEW.runovyKodPredmetu || '" s nejvyssi nebezpecnosti zachyceno!!!');
+    ELSIF nebezpecnost_pouziteho_predmetu > 7 THEN
+        DBMS_OUTPUT.PUT_LINE('Pouziti nebezpecneho predmetu s runovym kodem "' || :NEW.runovyKodPredmetu || '" se zvysenou nebezpecnosti "' || nebezpecnost_pouziteho_predmetu || '" zachyceno.');
+    END IF;
+EXCEPTION
+    -- Ignorovan pro pripad, kdy SELECT nenasel zadny predmet
+    WHEN OTHERS THEN
+        NULL;
+END;
+/
 
 ------------------------------------------------------------------
 
@@ -206,6 +253,8 @@ INSERT INTO ZachyceneStopy (poziceSaturnu, poziceJupiteru, pocetObehuJupiteru, m
 INSERT INTO ZachyceneStopy (poziceSaturnu, poziceJupiteru, pocetObehuJupiteru, mesicniFaze, runoveJmenoKouzelnika, idDetektoru, idTypu, runovyKodPredmetu)
     VALUES                 (250          , 300           , 5                 , 'nov'      , NULL                 , 6          , 2     , 2);
 
+INSERT INTO ZachyceneStopy (poziceSaturnu, poziceJupiteru, pocetObehuJupiteru, mesicniFaze, runoveJmenoKouzelnika, idDetektoru, idTypu, runovyKodPredmetu)
+    VALUES                 (250          , 300           , 5                 , 'nov'      , NULL                 , 6          , 2     , 4);
 
 ------------------------------------------------------------------
 
@@ -265,3 +314,188 @@ WHERE Kouzelnici.runoveJmeno IN (
     SELECT ZachyceneStopy.runoveJmenoKouzelnika
     FROM ZachyceneStopy
 ) AND Kouzelnici.mesto = 'Brno';
+
+-- Pouziti klauzule WITH a operator CASE:
+-- Kazdemu evidovanemu kouzelnikovi priradi slovni ohodnoceni jeho kouzelnicke urovne.
+WITH stupne_kouzelniku AS (
+    SELECT
+        runoveJmeno,
+        obcanskeJmeno,
+        kouzelnickaUroven,
+        CASE
+            WHEN kouzelnickaUroven <= 70 THEN 'Noob'
+            WHEN kouzelnickaUroven <= 140 THEN 'Greenhorn'
+            WHEN kouzelnickaUroven <= 211 THEN 'Arciwizard'
+            ELSE 'Unknown'
+        END AS nazev_urovne
+    FROM
+        Kouzelnici
+)
+SELECT
+    runoveJmeno,
+    obcanskeJmeno,
+    nazev_urovne
+FROM
+    stupne_kouzelniku;
+
+------------------------------------------------------------------
+
+----------------------- TRIGGERS SHOWCASE ------------------------
+-- Ukazka prvniho triggeru:
+    -- Vypis obsahuje jeden zaznam s kouzelnikem "Merlin" a predmetem s ID, ktere odpovida "Magic sword".
+
+-- Ukazka druheho triggeru:
+    -- Vypis obsahuje 3x pouziti predmetu s runovym kodem 6 nejvyssi nebezpecnosti a 1x pouziti predmetu s runovym kodem 4 se zvysenou nebezpecnosti 9.
+------------------------------------------------------------------
+
+--------------------------- PROCEDURES ---------------------------
+-- Procedura, ktera vypise pro jednotlive evidovane detektory procentualni zastoupeni stop jimi detekovanych z celkoveho poctu stop
+CREATE OR REPLACE PROCEDURE pocet_stop_prumer_detektor
+IS
+    -- Kursor pro zjisteni poctu zachycenych stop jednotlivymi detektory
+    CURSOR detector_cursor IS
+        SELECT idDetektoru, COUNT(*) AS pocet_zachytu
+        FROM ZachyceneStopy WHERE idDetektoru IS NOT NULL
+        GROUP BY idDetektoru;
+    -- Celkovy pocet zaznamu
+    pocet_vsech_stop NUMBER;
+    -- Unikatni identifikator detektoru
+    detektor_id ZachyceneStopy.idDetektoru%TYPE;
+    -- Pocet zachycenych stop
+    pocet_stop NUMBER;
+    -- Procentualni pocet zachyceni
+    procento_zcelku NUMBER;
+BEGIN
+    -- Ziskani poctu vsech zaznamu v tabulce zachycenych stop
+    SELECT COUNT(*) INTO pocet_vsech_stop FROM ZachyceneStopy;
+
+    FOR detektor_info IN detector_cursor LOOP
+        -- Nacteni udaju z konkretniho detektoru
+        detektor_id := detektor_info.idDetektoru;
+        pocet_stop  := detektor_info.pocet_zachytu;
+
+        BEGIN
+            -- Vypocet procentualniho zastoupeni zachyceni daneho detektoru z celkoveho poctu zachycenych stop
+            procento_zcelku := ((pocet_stop / pocet_vsech_stop) * 100);
+            DBMS_OUTPUT.PUT_LINE('Detektor ' || detektor_id || ' zachytil ' || TO_CHAR(procento_zcelku, '999.999') || '% vsech stop.');
+        EXCEPTION WHEN ZERO_DIVIDE THEN
+            BEGIN
+                DBMS_OUTPUT.PUT_LINE('Zadne stopy dosud nebyly zachyceny');
+                EXIT;
+            END;
+        END;
+    END LOOP;
+END pocet_stop_prumer_detektor;
+/
+
+-- Priklad spusteni:
+BEGIN
+    pocet_stop_prumer_detektor;
+END;
+/
+
+
+-- Procedura, ktera validne provede prevod vlastnictvi predmetu mezi kouzelniky
+CREATE OR REPLACE PROCEDURE prevod_vlastnictvi_predmetu(
+    runovy_kod_predmetu INT,
+    runove_jmeno_stareho_kouzelnika NVARCHAR2,
+    runove_jmeno_noveho_kouzelnika NVARCHAR2,
+    zpusob_ztraty_stareho_kouzelnika NVARCHAR2,
+    zpusob_ziskani_noveho_kouzelnika NVARCHAR2
+)
+AS
+    id_vlastnictvi_stareho_kouzelnika INT;
+BEGIN
+    -- ziskani id vlastnictvi predmetu stareho kouzelnika
+    SELECT idVlastnictvi INTO id_vlastnictvi_stareho_kouzelnika
+    FROM Vlastnictvi
+    WHERE runovyKodPredmetu = runovy_kod_predmetu
+    AND runoveJmenoKouzelnika = runove_jmeno_stareho_kouzelnika
+    AND zpusobZtraty IS NULL;
+
+    -- Odstraneni vlastnictvi od stareho kouzelnika
+    UPDATE Vlastnictvi
+    SET zpusobZtraty = zpusob_ztraty_stareho_kouzelnika
+    WHERE runovyKodPredmetu = runovy_kod_predmetu
+    AND runoveJmenoKouzelnika = runove_jmeno_stareho_kouzelnika
+    AND zpusobZtraty IS NULL;
+
+    -- Pridani vlastnictvi novemu kouzelnikovi
+    INSERT INTO Vlastnictvi (zpusobZiskani               , runovyKodPredmetu  , runoveJmenoKouzelnika)
+    VALUES              (zpusob_ziskani_noveho_kouzelnika, runovy_kod_predmetu, runove_jmeno_noveho_kouzelnika);
+
+    DBMS_OUTPUT.PUT_LINE('Predmet s runovym kodem "' || runovy_kod_predmetu || '" byl presunut z vlastnictvi kouzelnika "' || runove_jmeno_stareho_kouzelnika || '" do vlastnictvi kouzelnika "' || runove_jmeno_noveho_kouzelnika || '".');
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Chyba pri prevodu vlastnictvi predmetu s runovym kodem "' || runovy_kod_predmetu || '" z vlastnictvi kouzelnika "' || runove_jmeno_stareho_kouzelnika || '" do vlastnictvi kouzelnika "' || runove_jmeno_noveho_kouzelnika || '".');
+END prevod_vlastnictvi_predmetu;
+/
+
+-- Priklad spusteni:
+BEGIN
+    prevod_vlastnictvi_predmetu(1, 'Merlin', 'Gandalf', 'Prevod predmetu', 'Prevod predmetu');
+END;
+/
+
+
+------------------------------------------------------------------
+
+------------------------ MATERIALIZED VIEW -----------------------
+-- Materializovany pohled na vsechny zachycene predmety a prumerny pocet obehu Jupiteru ve kterem byly zachyceny
+CREATE MATERIALIZED VIEW zachycene_stopy_avg_jupiter
+AS
+SELECT
+    runovyKodPredmetu,
+    COUNT(*) AS pocet_zachyceni,
+    AVG(pocetObehuJupiteru) AS prumerny_pocet_obehu_jupiteru
+FROM ZachyceneStopy
+GROUP BY runovyKodPredmetu;
+
+-- Ukazka prace s materializovanym pohledem:
+    -- Zobrazeni materializovaneho pohledu
+    SELECT * FROM zachycene_stopy_avg_jupiter;
+
+    -- Aktualizace hodnot v materializovanem pohledu
+    -- -> Pridani nove polozky do tabulky, ze ktere materializovany pohled vychazi (toto alespon vyvola prvni trigger)
+    INSERT INTO ZachyceneStopy (poziceSaturnu, poziceJupiteru, pocetObehuJupiteru, mesicniFaze  , runoveJmenoKouzelnika, idDetektoru, idTypu, runovyKodPredmetu)
+        VALUES                 (24           , 11            , 4                 , 'prvni ctvrt', 'Gandalf'            , 5          , 2     , 6);
+    -- -> Opetovne zobrazeni materializovaneho pohledu: data v materializovanem pohledu jsou nemenna
+    SELECT * FROM zachycene_stopy_avg_jupiter;
+
+------------------------------------------------------------------
+
+---------------------- INDEX + EXPLAIN PLAN ----------------------
+
+-- vytvoreni indexu pro vyhledavani zachycenych stop podle runoveho jmena kouzelnika
+CREATE INDEX index_zachycenestopy_kouzelnik ON ZachyceneStopy(runoveJmenoKouzelnika);
+
+EXPLAIN PLAN FOR
+    SELECT Kouzelnici.runoveJmeno, COUNT(ZachyceneStopy.idZachyceni) AS pocet_zachyceni
+    FROM Kouzelnici
+    LEFT JOIN ZachyceneStopy ON Kouzelnici.runoveJmeno = ZachyceneStopy.runoveJmenoKouzelnika
+    GROUP BY Kouzelnici.runoveJmeno;
+
+-- vypis planu
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
+
+------------------------------------------------------------------
+
+-------------------------- GRANT ACCESS --------------------------
+GRANT ALL ON ZachyceneStopy              TO xjanst02;
+GRANT ALL ON StopyZachytnutelneDetektory TO xjanst02;
+GRANT ALL ON Detektory                   TO xjanst02;
+GRANT ALL ON StopyKouzelnychPredmetu     TO xjanst02;
+GRANT ALL ON TypyStop                    TO xjanst02;
+GRANT ALL ON Vlastnictvi                 TO xjanst02;
+GRANT ALL ON KouzelnePredmety            TO xjanst02;
+GRANT ALL ON MudlovskePredmety           TO xjanst02;
+GRANT ALL ON Predmety                    TO xjanst02;
+GRANT ALL ON Kouzelnici                  TO xjanst02;
+-- Pristup k materializovanemu pohledu
+GRANT ALL ON zachycene_stopy_avg_jupiter TO xjanst02;
+
+-- Pristup ke spousteni procedur
+GRANT EXECUTE ON pocet_stop_prumer_detektor TO xjanst02;
+GRANT EXECUTE ON prevod_vlastnictvi_predmetu TO xjanst02;
+
+------------------------------------------------------------------
