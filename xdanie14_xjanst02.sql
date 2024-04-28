@@ -465,6 +465,14 @@ GROUP BY runovyKodPredmetu;
 ------------------------------------------------------------------
 
 ---------------------- INDEX + EXPLAIN PLAN ----------------------
+EXPLAIN PLAN FOR
+    SELECT Kouzelnici.runoveJmeno, COUNT(ZachyceneStopy.idZachyceni) AS pocet_zachyceni
+    FROM Kouzelnici
+    LEFT JOIN ZachyceneStopy ON Kouzelnici.runoveJmeno = ZachyceneStopy.runoveJmenoKouzelnika
+    GROUP BY Kouzelnici.runoveJmeno;
+
+-- vypis planu - bez optimalizace
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
 
 -- vytvoreni indexu pro vyhledavani zachycenych stop podle runoveho jmena kouzelnika
 CREATE INDEX index_zachycenestopy_kouzelnik ON ZachyceneStopy(runoveJmenoKouzelnika);
@@ -475,8 +483,9 @@ EXPLAIN PLAN FOR
     LEFT JOIN ZachyceneStopy ON Kouzelnici.runoveJmeno = ZachyceneStopy.runoveJmenoKouzelnika
     GROUP BY Kouzelnici.runoveJmeno;
 
--- vypis planu
+-- vypis planu - s optimalizaci
 SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
+
 
 ------------------------------------------------------------------
 
